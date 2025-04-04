@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -30,10 +31,12 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     if (user != null) {
-      Navigator.pushReplacementNamed(
+      Navigator.pushReplacement(
         context,
-        '/login',
-        arguments: "Successfully signed up! Please log in.",
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Successfully signed up! Please log in.")),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

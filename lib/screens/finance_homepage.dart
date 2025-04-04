@@ -4,6 +4,7 @@ import '../utils/database_helper.dart';
 import 'income_page.dart';
 import 'expense_page.dart';
 import 'analytics_page.dart';
+import '../services/auth_service.dart';
 
 class FinanceHomePage extends StatefulWidget {
   const FinanceHomePage({super.key});
@@ -41,9 +42,41 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
   }
 
   Future<void> _syncToCloud() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirm Sync'),
+          content: const Text(
+            'This will overwrite all cloud data with your local data. Do you want to continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Sync'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final userId = AuthService().getCurrentUserId();
+    if (userId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('User not logged in.')));
+      return;
+    }
+
     try {
-      final incomeCollection = firestore.collection('income');
-      final expenseCollection = firestore.collection('expenses');
+      final incomeCollection = firestore.collection('users/$userId/income');
+      final expenseCollection = firestore.collection('users/$userId/expenses');
 
       // Sync income transactions
       for (var transaction in incomeTransactions) {
@@ -86,9 +119,41 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
   }
 
   Future<void> _fetchFromCloud() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirm Fetch'),
+          content: const Text(
+            'This will overwrite all local data with cloud data. Do you want to continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Fetch'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final userId = AuthService().getCurrentUserId();
+    if (userId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('User not logged in.')));
+      return;
+    }
+
     try {
-      final incomeCollection = firestore.collection('income');
-      final expenseCollection = firestore.collection('expenses');
+      final incomeCollection = firestore.collection('users/$userId/income');
+      final expenseCollection = firestore.collection('users/$userId/expenses');
 
       final incomeDocs = await incomeCollection.get();
       final expenseDocs = await expenseCollection.get();
@@ -239,8 +304,32 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
     final transaction =
         isIncome ? incomeTransactions[index] : expenseTransactions[index];
 
-    await dbHelper.deleteTransaction(transaction['id']);
-    _loadTransactions();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirm Delete'),
+          content: const Text(
+            'Are you sure you want to delete this transaction?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      await dbHelper.deleteTransaction(transaction['id']);
+      _loadTransactions();
+    }
   }
 
   @override

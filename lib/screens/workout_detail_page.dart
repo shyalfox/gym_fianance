@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/database_helper.dart';
+import '../services/auth_service.dart';
 
 class WorkoutDetailPage extends StatefulWidget {
   final String muscleGroup;
@@ -130,6 +131,15 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
     );
   }
 
+  Future<void> _confirmAndDeleteWorkout(int workoutIndex) async {
+    await _showConfirmationDialog(
+      context: context,
+      title: 'Delete Workout',
+      content: 'Are you sure you want to delete this workout?',
+      onConfirm: () => _deleteWorkout(workoutIndex),
+    );
+  }
+
   void _addWorkout() {
     setState(() {
       workouts.add({
@@ -166,18 +176,23 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   }
 
   Future<void> _syncToFirestore() async {
-    final firestore = FirebaseFirestore.instance;
+    final userId = AuthService().getCurrentUserId();
+    if (userId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('User not logged in.')));
+      return;
+    }
 
-    // Reference to the muscle group document
-    final muscleGroupRef = firestore
-        .collection('workouts')
+    final muscleGroupRef = FirebaseFirestore.instance
+        .collection('users/$userId/workouts')
         .doc(widget.muscleGroup);
 
     // Fetch existing parts from Firebase
     final partSnapshot = await muscleGroupRef.get();
     final existingParts =
         partSnapshot.exists
-            ? (partSnapshot.data() as Map<String, dynamic>) // Explicit cast
+            ? (partSnapshot.data() as Map<String, dynamic>)
             : <String, dynamic>{};
 
     // Prepare data for the selected part
@@ -226,11 +241,16 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   }
 
   Future<void> _fetchFromFirestore() async {
-    final firestore = FirebaseFirestore.instance;
+    final userId = AuthService().getCurrentUserId();
+    if (userId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('User not logged in.')));
+      return;
+    }
 
-    // Reference to the muscle group document
-    final muscleGroupRef = firestore
-        .collection('workouts')
+    final muscleGroupRef = FirebaseFirestore.instance
+        .collection('users/$userId/workouts')
         .doc(widget.muscleGroup);
 
     // Fetch data for the selected part
@@ -277,18 +297,14 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
     });
 
     // Save fetched data locally and update the `id` field
-    await dbHelper.deleteWorkoutByPart(
-      widget.muscleGroup,
-      selectedPart,
-    ); // Clear existing data for the part
+    await dbHelper.deleteWorkoutByPart(widget.muscleGroup, selectedPart);
     for (var workout in workouts) {
       final workoutId = await dbHelper.insertWorkout(
         workout['nameController'].text,
         widget.muscleGroup,
         workout['part'],
       );
-      workout['id'] =
-          workoutId; // Update the `id` field with the database-generated ID
+      workout['id'] = workoutId;
 
       for (var set in workout['sets']) {
         await dbHelper.insertSet(
@@ -514,7 +530,9 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
                                       color: Colors.red,
                                     ),
                                     onPressed:
-                                        () => _deleteWorkout(workoutIndex),
+                                        () => _confirmAndDeleteWorkout(
+                                          workoutIndex,
+                                        ),
                                   ),
                                 ],
                               ),
