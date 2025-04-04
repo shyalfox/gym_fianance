@@ -51,7 +51,7 @@ class _IncomePageState extends State<IncomePage> {
                   ),
                 ),
                 subtitle: Text(
-                  'Amount: \$${transaction['amount'].toStringAsFixed(2)}',
+                  'Amount: \Rs.${transaction['amount'].toStringAsFixed(2)}',
                   style: const TextStyle(fontSize: 16),
                 ),
                 trailing: Row(

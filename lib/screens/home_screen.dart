@@ -31,7 +31,7 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             CustomCard(
               title: 'Finance',
-              icon: Icons.attach_money,
+              icon: Icons.account_balance_wallet_rounded,
               onTap: () {
                 Navigator.push(
                   context,
@@ -44,8 +44,11 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                await authService.signOut();
-                Navigator.pushReplacementNamed(context, '/login');
+                try {
+                  await authService.signOut();
+                  Navigator.pushReplacementNamed(context, '/login');
+                  // ignore: empty_catches
+                } catch (e) {}
               },
               child: const Text("Logout"),
             ),

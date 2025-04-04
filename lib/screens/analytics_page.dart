@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../utils/database_helper.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -120,10 +123,109 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
+  void _generatePDF() async {
+    if (startDate == null || endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a date range first.')),
+      );
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build:
+            (context) => [
+              pw.Header(
+                level: 0,
+                child: pw.Text(
+                  'Financial Report',
+                  style: pw.TextStyle(
+                    fontSize: 28,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Date Range: ${startDate!.toLocal().year}-${startDate!.toLocal().month.toString().padLeft(2, '0')}-${startDate!.toLocal().day.toString().padLeft(2, '0')} '
+                'to ${endDate!.toLocal().year}-${endDate!.toLocal().month.toString().padLeft(2, '0')}-${endDate!.toLocal().day.toString().padLeft(2, '0')}',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Detailed Transactions',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table.fromTextArray(
+                headers: ['Date', 'Title', 'Income', 'Expense'],
+                data: [
+                  ...filteredIncome.map(
+                    (t) => [
+                      '${DateTime.parse(t['date']).toLocal().year}-${DateTime.parse(t['date']).toLocal().month.toString().padLeft(2, '0')}-${DateTime.parse(t['date']).toLocal().day.toString().padLeft(2, '0')}',
+                      t['title'],
+                      '\Rs.${t['amount'].toStringAsFixed(2)}',
+                      '',
+                    ],
+                  ),
+                  ...filteredExpense.map(
+                    (t) => [
+                      '${DateTime.parse(t['date']).toLocal().year}-${DateTime.parse(t['date']).toLocal().month.toString().padLeft(2, '0')}-${DateTime.parse(t['date']).toLocal().day.toString().padLeft(2, '0')}',
+                      t['title'],
+                      '',
+                      '\Rs.${t['amount'].toStringAsFixed(2)}',
+                    ],
+                  ),
+                  // Add a summary row for totals
+                  [
+                    'Total',
+                    '',
+                    '\Rs.${totalIncome.toStringAsFixed(2)}',
+                    '\Rs.${totalExpense.toStringAsFixed(2)}',
+                  ],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Final Balance: \Rs.${(totalIncome - totalExpense).toStringAsFixed(2)}',
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue,
+                ),
+              ),
+            ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Analytics '), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Analytics'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Generate PDF',
+            onPressed: _generatePDF,
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -131,9 +233,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           children: [
             Text(
               'Net Balance: \Rs:${netBalance.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             const Text(
               'Income vs Expenses',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -170,18 +272,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Income: \$${totalIncome.toStringAsFixed(2)}',
+                        'Income: \Rs.${totalIncome.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 18,
                           color: Colors.green,
                         ),
                       ),
                       Text(
-                        'Expense: \$${totalExpense.toStringAsFixed(2)}',
+                        'Expense: \Rs.${totalExpense.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 18, color: Colors.red),
                       ),
                       Text(
-                        'Net Balance: \$${(totalIncome - totalExpense).toStringAsFixed(2)}',
+                        'Net Balance: \Rs.${(totalIncome - totalExpense).toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -207,11 +309,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       (t) => ListTile(
                         title: Text(t['title']),
                         subtitle: Text(
-                          'Amount: \$${t['amount'].toStringAsFixed(2)}\n'
-                          'Date: ${DateTime.parse(t['date']).toLocal().year}-'
+                          'Amount: \Rs.${t['amount'].toStringAsFixed(2)}\n'
+                          '${DateTime.parse(t['date']).toLocal().year}-'
                           '${DateTime.parse(t['date']).toLocal().month.toString().padLeft(2, '0')}-'
-                          '${DateTime.parse(t['date']).toLocal().day.toString().padLeft(2, '0')}\n'
-                          'Time: ${DateTime.parse(t['date']).toLocal().hour > 12 ? DateTime.parse(t['date']).toLocal().hour - 12 : DateTime.parse(t['date']).toLocal().hour}:'
+                          '${DateTime.parse(t['date']).toLocal().day.toString().padLeft(2, '0')} '
+                          '${DateTime.parse(t['date']).toLocal().hour > 12 ? DateTime.parse(t['date']).toLocal().hour - 12 : DateTime.parse(t['date']).toLocal().hour}:'
                           '${DateTime.parse(t['date']).toLocal().minute.toString().padLeft(2, '0')} '
                           '${DateTime.parse(t['date']).toLocal().hour >= 12 ? 'PM' : 'AM'}',
                         ),
@@ -229,11 +331,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       (t) => ListTile(
                         title: Text(t['title']),
                         subtitle: Text(
-                          'Amount: \$${t['amount'].toStringAsFixed(2)}\n'
-                          'Date: ${DateTime.parse(t['date']).toLocal().year}-'
+                          'Amount: \Rs.${t['amount'].toStringAsFixed(2)}\n'
+                          '${DateTime.parse(t['date']).toLocal().year}-'
                           '${DateTime.parse(t['date']).toLocal().month.toString().padLeft(2, '0')}-'
-                          '${DateTime.parse(t['date']).toLocal().day.toString().padLeft(2, '0')}\n'
-                          'Time: ${DateTime.parse(t['date']).toLocal().hour > 12 ? DateTime.parse(t['date']).toLocal().hour - 12 : DateTime.parse(t['date']).toLocal().hour}:'
+                          '${DateTime.parse(t['date']).toLocal().day.toString().padLeft(2, '0')} '
+                          '${DateTime.parse(t['date']).toLocal().hour > 12 ? DateTime.parse(t['date']).toLocal().hour - 12 : DateTime.parse(t['date']).toLocal().hour}:'
                           '${DateTime.parse(t['date']).toLocal().minute.toString().padLeft(2, '0')} '
                           '${DateTime.parse(t['date']).toLocal().hour >= 12 ? 'PM' : 'AM'}',
                         ),

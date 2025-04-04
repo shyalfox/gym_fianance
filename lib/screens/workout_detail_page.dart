@@ -254,7 +254,8 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
       workouts.addAll(
         partData.map((workout) {
           return {
-            'id': int.tryParse(workout['id'] ?? ''),
+            'id':
+                null, // Temporarily set to null until synced with the database
             'nameController': TextEditingController(
               text: workout['name'] ?? '',
             ),
@@ -275,7 +276,7 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
       );
     });
 
-    // Save fetched data locally
+    // Save fetched data locally and update the `id` field
     await dbHelper.deleteWorkoutByPart(
       widget.muscleGroup,
       selectedPart,
@@ -286,6 +287,9 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
         widget.muscleGroup,
         workout['part'],
       );
+      workout['id'] =
+          workoutId; // Update the `id` field with the database-generated ID
+
       for (var set in workout['sets']) {
         await dbHelper.insertSet(
           workoutId,

@@ -281,9 +281,21 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Income',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Row(
+                    children: <Widget>[
+                      Icon(
+                        Icons.arrow_upward, // Income icon
+                        color: Colors.green,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Income ',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                   Row(
                     children: [
@@ -333,7 +345,7 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
                           ),
                         ),
                         subtitle: Text(
-                          'Amount: \$${transaction['amount'].toStringAsFixed(2)}',
+                          'Amount: \Rs.${transaction['amount'].toStringAsFixed(2)}',
                           style: const TextStyle(fontSize: 16),
                         ),
                         trailing: Row(
@@ -359,9 +371,21 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Expenses',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Row(
+                    children: <Widget>[
+                      Icon(
+                        Icons.arrow_downward, // Expenses icon
+                        color: Colors.red,
+                      ),
+                      SizedBox(width: 2),
+                      Text(
+                        'Expenses ',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                   Row(
                     children: [
@@ -411,7 +435,7 @@ class _FinanceHomePageState extends State<FinanceHomePage> {
                           ),
                         ),
                         subtitle: Text(
-                          'Amount: \$${transaction['amount'].toStringAsFixed(2)}',
+                          'Amount: \Rs.${transaction['amount'].toStringAsFixed(2)}',
                           style: const TextStyle(fontSize: 16),
                         ),
                         trailing: Row(
