@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "31020772033",
+    "project_id": "gymnfinance",
+    "storage_bucket": "gymnfinance.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:31020772033:android:e25404e976fa7229a78240",
+        "android_client_info": {
+          "package_name": "com.example.gym_finance"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRX_VSA5AWyeakgr3foHWv4LReLOGYCKc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
