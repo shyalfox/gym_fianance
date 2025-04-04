@@ -19,8 +19,16 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Incremented version
       onCreate: _createDB,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Add the `part` column to the `workouts` table
+          await db.execute(
+            'ALTER TABLE workouts ADD COLUMN part TEXT NOT NULL DEFAULT "Part 1"',
+          );
+        }
+      },
       onOpen: (db) async {
         // Check if the transactions table exists
         final tables = await db.rawQuery(
@@ -39,7 +47,8 @@ class DatabaseHelper {
       CREATE TABLE IF NOT EXISTS workouts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        muscleGroup TEXT NOT NULL
+        muscleGroup TEXT NOT NULL,
+        part TEXT NOT NULL
       )
     ''');
 
@@ -65,11 +74,16 @@ class DatabaseHelper {
     ''');
   }
 
-  Future<int> insertWorkout(String name, String muscleGroup) async {
+  Future<int> insertWorkout(
+    String name,
+    String muscleGroup,
+    String part,
+  ) async {
     final db = await instance.database;
     return await db.insert('workouts', {
       'name': name,
       'muscleGroup': muscleGroup,
+      'part': part,
     });
   }
 
@@ -108,6 +122,18 @@ class DatabaseHelper {
       'workouts',
       where: 'muscleGroup = ?',
       whereArgs: [muscleGroup],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> fetchWorkoutsByPart(
+    String muscleGroup,
+    String part,
+  ) async {
+    final db = await instance.database;
+    return await db.query(
+      'workouts',
+      where: 'muscleGroup = ? AND part = ?',
+      whereArgs: [muscleGroup, part],
     );
   }
 
@@ -168,5 +194,32 @@ class DatabaseHelper {
   Future<int> deleteSet(int id) async {
     final db = await instance.database;
     return await db.delete('sets', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteWorkoutByPart(String muscleGroup, String part) async {
+    final db = await instance.database;
+
+    // Fetch all workouts for the given muscle group and part
+    final workouts = await db.query(
+      'workouts',
+      where: 'muscleGroup = ? AND part = ?',
+      whereArgs: [muscleGroup, part],
+    );
+
+    // Delete associated sets for each workout
+    for (var workout in workouts) {
+      await db.delete(
+        'sets',
+        where: 'workoutId = ?',
+        whereArgs: [workout['id']],
+      );
+    }
+
+    // Delete workouts for the given muscle group and part
+    await db.delete(
+      'workouts',
+      where: 'muscleGroup = ? AND part = ?',
+      whereArgs: [muscleGroup, part],
+    );
   }
 }

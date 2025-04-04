@@ -16,6 +16,8 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   final DatabaseHelper dbHelper = DatabaseHelper.instance;
   int? editingWorkoutIndex;
   final List<int> deletedWorkoutIds = [];
+  String selectedPart = 'Part 1';
+  final List<String> parts = ['Part 1', 'Part 2'];
 
   @override
   void initState() {
@@ -24,14 +26,20 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   }
 
   Future<void> _loadWorkouts() async {
-    final data = await dbHelper.fetchWorkouts(widget.muscleGroup);
+    final data = await dbHelper.fetchWorkoutsByPart(
+      widget.muscleGroup,
+      selectedPart,
+    );
     setState(() {
       workouts.clear();
       workouts.addAll(
         data.map(
           (workout) => {
             'id': workout['id'],
-            'nameController': TextEditingController(text: workout['name']),
+            'nameController': TextEditingController(
+              text: workout['name'], // Proper initialization
+            ),
+            'part': workout['part'],
             'sets': [],
           },
         ),
@@ -44,8 +52,13 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
         workout['sets'] =
             sets.map((set) {
               return {
-                'weightController': TextEditingController(text: set['weight']),
-                'repsController': TextEditingController(text: set['reps']),
+                'id': set['id'], // Ensure set ID is included
+                'weightController': TextEditingController(
+                  text: set['weight'], // Proper initialization
+                ),
+                'repsController': TextEditingController(
+                  text: set['reps'], // Proper initialization
+                ),
               };
             }).toList();
       });
@@ -55,11 +68,18 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   Future<void> _saveWorkout(int workoutIndex) async {
     final workout = workouts[workoutIndex];
     final name = workout['nameController'].text;
+    final part = workout['part'];
 
     if (workout['id'] == null) {
       // Insert new workout
-      final workoutId = await dbHelper.insertWorkout(name, widget.muscleGroup);
-      workout['id'] = workoutId;
+      final workoutId = await dbHelper.insertWorkout(
+        name,
+        widget.muscleGroup,
+        part,
+      );
+      setState(() {
+        workout['id'] = workoutId; // Update the local state with the new ID
+      });
 
       // Save sets
       for (var set in workout['sets']) {
@@ -68,20 +88,21 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
           set['weightController'].text,
           set['repsController'].text,
           '',
-        ); // Empty string for sets
+        );
       }
     } else {
       // Update existing workout
       await dbHelper.updateWorkout(workout['id'], name);
 
       // Save sets
+      await dbHelper.deleteWorkout(workout['id']); // Clear existing sets
       for (var set in workout['sets']) {
         await dbHelper.insertSet(
           workout['id'],
           set['weightController'].text,
           set['repsController'].text,
           '',
-        ); // Empty string for sets
+        );
       }
     }
 
@@ -113,7 +134,8 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
     setState(() {
       workouts.add({
         'id': null,
-        'nameController': TextEditingController(),
+        'nameController': TextEditingController(), // Proper initialization
+        'part': selectedPart, // Automatically assign selectedPart
         'sets': [],
       });
       editingWorkoutIndex = workouts.length - 1;
@@ -129,8 +151,8 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   void _addSet(int workoutIndex) {
     setState(() {
       workouts[workoutIndex]['sets'].add({
-        'weightController': TextEditingController(),
-        'repsController': TextEditingController(),
+        'weightController': TextEditingController(), // Proper initialization
+        'repsController': TextEditingController(), // Proper initialization
       });
     });
   }
@@ -145,49 +167,59 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
 
   Future<void> _syncToFirestore() async {
     final firestore = FirebaseFirestore.instance;
-    final batch = firestore.batch();
 
-    // Handle deletions
-    for (var workoutId in deletedWorkoutIds) {
-      final workoutRef = firestore
-          .collection('workouts')
-          .doc(workoutId.toString());
-      final setsSnapshot = await workoutRef.collection('sets').get();
-      for (var setDoc in setsSnapshot.docs) {
-        batch.delete(setDoc.reference);
-      }
-      batch.delete(workoutRef);
-    }
-    deletedWorkoutIds.clear();
+    // Reference to the muscle group document
+    final muscleGroupRef = firestore
+        .collection('workouts')
+        .doc(widget.muscleGroup);
 
-    // Handle additions/updates
-    for (var workout in workouts) {
-      final workoutRef = firestore
-          .collection('workouts')
-          .doc(
-            workout['id']?.toString() ??
+    // Fetch existing parts from Firebase
+    final partSnapshot = await muscleGroupRef.get();
+    final existingParts =
+        partSnapshot.exists
+            ? (partSnapshot.data() as Map<String, dynamic>) // Explicit cast
+            : <String, dynamic>{};
+
+    // Prepare data for the selected part
+    final partData =
+        workouts.map((workout) {
+          return {
+            'id':
+                workout['id']?.toString() ??
                 DateTime.now().millisecondsSinceEpoch.toString(),
-          );
-      batch.set(workoutRef, {
-        'name': workout['nameController'].text,
-        'muscleGroup': widget.muscleGroup,
-      });
+            'name': workout['nameController'].text,
+            'sets':
+                workout['sets'].map((set) {
+                  return {
+                    'weight': set['weightController'].text,
+                    'reps': set['repsController'].text,
+                  };
+                }).toList(),
+          };
+        }).toList();
 
-      final setsSnapshot = await workoutRef.collection('sets').get();
-      for (var setDoc in setsSnapshot.docs) {
-        batch.delete(setDoc.reference); // Clear existing sets
-      }
+    // Update the selected part in Firebase
+    existingParts[selectedPart] = partData;
 
-      for (var set in workout['sets']) {
-        final setRef = workoutRef.collection('sets').doc();
-        batch.set(setRef, {
-          'weight': set['weightController'].text,
-          'reps': set['repsController'].text,
-        });
-      }
+    // Sync local data to Firebase
+    await muscleGroupRef.set(existingParts);
+
+    // Delete exercises in Firebase that are not present locally
+    if (existingParts[selectedPart] != null) {
+      final cloudExercises =
+          (existingParts[selectedPart] as List).map((e) => e['id']).toSet();
+      final localExercises =
+          workouts.map((workout) => workout['id']?.toString()).toSet();
+      final exercisesToDelete = cloudExercises.difference(localExercises);
+
+      existingParts[selectedPart] =
+          (existingParts[selectedPart] as List)
+              .where((e) => !exercisesToDelete.contains(e['id']))
+              .toList();
+
+      await muscleGroupRef.set(existingParts);
     }
 
-    await batch.commit();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Data synced to Firestore successfully!')),
     );
@@ -195,43 +227,131 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
 
   Future<void> _fetchFromFirestore() async {
     final firestore = FirebaseFirestore.instance;
-    final querySnapshot =
-        await firestore
-            .collection('workouts')
-            .where('muscleGroup', isEqualTo: widget.muscleGroup)
-            .get();
 
-    final fetchedWorkouts =
-        querySnapshot.docs.map((doc) async {
-          final setsSnapshot = await doc.reference.collection('sets').get();
+    // Reference to the muscle group document
+    final muscleGroupRef = firestore
+        .collection('workouts')
+        .doc(widget.muscleGroup);
+
+    // Fetch data for the selected part
+    final partSnapshot = await muscleGroupRef.get();
+    if (!partSnapshot.exists ||
+        !(partSnapshot.data() as Map<String, dynamic>).containsKey(
+          selectedPart,
+        )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No data found for the selected part!')),
+      );
+      return;
+    }
+
+    final partData =
+        (partSnapshot.data() as Map<String, dynamic>)[selectedPart] as List;
+
+    // Replace local data for the selected part with fetched data
+    setState(() {
+      workouts.clear();
+      workouts.addAll(
+        partData.map((workout) {
           return {
-            'id': int.tryParse(doc.id),
-            'nameController': TextEditingController(text: doc['name']),
+            'id': int.tryParse(workout['id'] ?? ''),
+            'nameController': TextEditingController(
+              text: workout['name'] ?? '',
+            ),
+            'part': selectedPart,
             'sets':
-                setsSnapshot.docs.map((setDoc) {
+                (workout['sets'] as List).map((set) {
                   return {
                     'weightController': TextEditingController(
-                      text: setDoc['weight'],
+                      text: set['weight'] ?? '',
                     ),
                     'repsController': TextEditingController(
-                      text: setDoc['reps'],
+                      text: set['reps'] ?? '',
                     ),
                   };
                 }).toList(),
           };
-        }).toList();
-
-    final resolvedWorkouts = await Future.wait(fetchedWorkouts);
-
-    setState(() {
-      workouts.clear();
-      workouts.addAll(resolvedWorkouts);
+        }).toList(),
+      );
     });
+
+    // Save fetched data locally
+    await dbHelper.deleteWorkoutByPart(
+      widget.muscleGroup,
+      selectedPart,
+    ); // Clear existing data for the part
+    for (var workout in workouts) {
+      final workoutId = await dbHelper.insertWorkout(
+        workout['nameController'].text,
+        widget.muscleGroup,
+        workout['part'],
+      );
+      for (var set in workout['sets']) {
+        await dbHelper.insertSet(
+          workoutId,
+          set['weightController'].text,
+          set['repsController'].text,
+          '',
+        );
+      }
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Data fetched from Firestore successfully!'),
+        content: Text('Data fetched and stored locally successfully!'),
       ),
+    );
+  }
+
+  Future<void> _showConfirmationDialog({
+    required BuildContext context,
+    required String title,
+    required String content,
+    required VoidCallback onConfirm,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text('Confirm'),
+              ),
+            ],
+          ),
+    );
+
+    if (result == true) {
+      onConfirm();
+    }
+  }
+
+  Future<void> _confirmAndFetchFromFirestore() async {
+    await _showConfirmationDialog(
+      context: context,
+      title: 'Fetch Data',
+      content:
+          'Fetching data will delete all local data for the selected part and overwrite it with cloud data. Do you want to proceed?',
+      onConfirm: _fetchFromFirestore,
+    );
+  }
+
+  Future<void> _confirmAndSyncToFirestore() async {
+    await _showConfirmationDialog(
+      context: context,
+      title: 'Sync Data',
+      content:
+          'Syncing data will overwrite all cloud data for the selected part with your local data. Do you want to proceed?',
+      onConfirm: _syncToFirestore,
     );
   }
 
@@ -242,13 +362,29 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
         title: Text('${widget.muscleGroup} Workouts'),
         centerTitle: true,
         actions: [
+          DropdownButton<String>(
+            value: selectedPart,
+            items:
+                parts
+                    .map(
+                      (part) =>
+                          DropdownMenuItem(value: part, child: Text(part)),
+                    )
+                    .toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedPart = value!;
+                _loadWorkouts(); // Reload workouts based on selected part
+              });
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.cloud_upload),
-            onPressed: _syncToFirestore,
+            onPressed: _confirmAndSyncToFirestore,
           ),
           IconButton(
             icon: const Icon(Icons.cloud_download),
-            onPressed: _fetchFromFirestore,
+            onPressed: _confirmAndFetchFromFirestore,
           ),
         ],
       ),
@@ -337,42 +473,59 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
                         ],
                       )
                     else
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                workout['nameController'].text,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    workout['nameController'].text,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Sets: ${workout['sets'].length}',
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                'Sets: ${workout['sets'].length}',
-                                style: const TextStyle(fontSize: 14),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () => _editWorkout(workoutIndex),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed:
+                                        () => _deleteWorkout(workoutIndex),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                ),
-                                onPressed: () => _editWorkout(workoutIndex),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
-                                ),
-                                onPressed: () => _deleteWorkout(workoutIndex),
-                              ),
-                            ],
+                          const SizedBox(height: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children:
+                                workout['sets'].map<Widget>((set) {
+                                  return Text(
+                                    'Weight: ${set['weightController'].text}, Reps: ${set['repsController'].text}',
+                                    style: const TextStyle(fontSize: 14),
+                                  );
+                                }).toList(),
                           ),
                         ],
                       ),
